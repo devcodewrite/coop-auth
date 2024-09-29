@@ -21,7 +21,7 @@
     "firebase/php-jwt": "^6.10",
     "codeigniter4/framework": "^4.5",
     "minimum-stability": "dev",
-    "prefer-stable": true
+    "prefer-stable": "v0.1.0"
   },
   "extra": {
     "codeigniter4": {
