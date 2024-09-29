@@ -29,5 +29,8 @@
         "CoopAuth\\Commands\\SetupCommand"
       ]
     }
+  },
+  "require-dev": {
+
   }
 }

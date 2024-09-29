@@ -1,12 +1,46 @@
 <?php
 
-namespace Codewrite\CoopAuth\Config;
+namespace Config;
 
 use CodeIgniter\Config\BaseConfig;
 
 class CoopAuth extends BaseConfig
 {
-    public $tokenExpiration = 3600; // JWT token expiration in seconds
-    public $issuer = 'your-app';    // JWT Issuer
-    public $audience = 'your-users'; // JWT Audience
+       /**
+     * --------------------------------------------------------------------------
+     * JWT Secret
+     * --------------------------------------------------------------------------
+     * JWT secret provide for jwt encodeing. You can override the value here by
+     * specifying coopAuth.jwtSecret in the .env file
+     */
+    public $jwtSecret = 'your-default-jwt-secret';
+
+    public $tokenExpiry = 60; // Default to 60 secounds
+
+    public $algorithm = 'HS256';
+
+    public $userModelName = 'UserModel';
+
+     /**
+     * --------------------------------------------------------------------------
+     * Resources
+     * --------------------------------------------------------------------------
+     *
+     * List of key-value for that can be specified as resource in permissions
+     * if a key is not not in this list permission will be denied for the request
+     * by the authorization engine. The key is the resource name used in permission
+     * and the value is the app/Model file name for database table use for the resource.
+     * 
+     * Here are some examples:
+     *     [
+     *         'users'     => 'UserModel',
+     *         'resources' => 'ResourceModel',
+     *     ]
+     *
+     * @var array<string, string>
+     */
+    public $resources = [
+        'users' => 'UserModel',
+        'resources' => 'Resource'
+    ];
 }
