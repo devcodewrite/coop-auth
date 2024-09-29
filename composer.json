@@ -1,0 +1,15 @@
+{
+    "name": "codewrite/coop-auth",
+    "description": "A simple authentication library for CodeIgniter 4 using JWT.",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+      "psr-4": {
+        "Codewrite\\CoopAuth\\": "src/"
+      }
+    },
+    "require": {
+      "php": ">=7.4",
+      "firebase/php-jwt": "^6.10"
+    }
+  }
