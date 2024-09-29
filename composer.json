@@ -19,7 +19,9 @@
   "require": {
     "php": ">=7.4",
     "firebase/php-jwt": "^6.10",
-    "codeigniter4/framework": "^4.5"
+    "codeigniter4/framework": "^4.5",
+    "minimum-stability": "dev",
+    "prefer-stable": true
   },
   "extra": {
     "codeigniter4": {
