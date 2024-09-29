@@ -2,7 +2,8 @@
 
 namespace Codewrite\CoopAuth;
 
-use CodeIgniter\HTTP\Response;
+use CodeIgniter\HTTP\Exceptions\HTTPException;
+use CodeIgniter\Model;
 use Firebase\JWT\ExpiredException;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
@@ -31,12 +32,12 @@ class Auth
     public function generateToken(array $payload): string
     {
         $payload = array_merge([
-            'iss' => site_url(),
+            'iss' => 'localhost',
             'iat' => time(),
             'nbf' => time(),
             'exp' => $this->config->tokenExpiry,
         ], $payload);
-        return JWT::encode($payload, $this->config->secretKey, $this->config->algorithm);
+        return JWT::encode($payload, $this->config->jwtSecret, $this->config->algorithm);
     }
 
     /**
@@ -45,19 +46,13 @@ class Auth
     public function decodeToken(string $token): stdClass
     {
         try {
-            return JWT::decode($token, new Key($this->secretKey, $this->algorithm));
+            return JWT::decode($token, new Key($this->config->jwtSecret, $this->config->algorithm));
         } catch (ExpiredException $e) {
             // Handle expired token exception
-            return $this->unauthorizedResponse([
-                'error_code' => 3,
-                'message' => 'Token has expired. Please refresh your token.'
-            ]);
+            throw new ExpiredException("Expired token");
         } catch (\Exception $e) {
             // Handle other JWT exceptions
-            return $this->unauthorizedResponse([
-                'error_code' => 2,
-                'message' => 'Invalid token'
-            ]);
+            throw new HTTPException("Invalid token!", 403);
         }
     }
 
@@ -134,10 +129,11 @@ class Auth
      * $condition a string of the form feild:value that will be check
      * on the model connected to the resource to see if it matches
      */
-    public function can($action, $resource, $condition = null): bool
+    public function can($action, $resource, Model &$model = null): bool
     {
         // Retrieve permissions from the decoded JWT
         $permissions = $this->permissions();
+        $check = false;
 
         foreach ($permissions as $key => $permission) {
             if (!$this->isValidPermission($permission))
@@ -146,30 +142,19 @@ class Auth
             if (!in_array($action, $permission->actions)) return false;
 
             $parts = explode(':', $permission->resource);
-            if (count($parts) === 2)
+            if (count($parts) <= 2)
                 return $this->validateConditions($parts[0], $resource);
 
-            $condition = [$parts[1] => $parts[2]];
+            if (!in_array($parts[1], $this->config->conditionKeys))
+                throw new InvalidConditionKeyException();
 
-            return $this->validateConditions($parts[0], $resource, $condition);
+            $condition = ['key' => $parts[1], 'values' => explode(',', $parts[2])];
+
+            $check = $check || $this->validateConditions($parts[0], $resource, $condition);
+
+            if ($check && $model) $model->whereIn($parts[1], $condition['values']);
         }
-        return false;
-    }
-
-    /**
-     * Return a 401 Unauthorized response.
-     */
-    public function unauthorizedResponse($data)
-    {
-        return $this->response->setJSON($data)->setStatusCode(Response::HTTP_UNAUTHORIZED);
-    }
-
-    /**
-     * Return a 403 Forbidden response.
-     */
-    public function forbiddenResponse($data)
-    {
-        return $this->response->setJSON($data)->setStatusCode(Response::HTTP_FORBIDDEN);
+        return $check;
     }
 
     protected function validateConditions($providedResource, $reqResource, $condition = null): bool
@@ -180,7 +165,7 @@ class Auth
         $model = model($this->config->resources[$reqResource]);
 
         return ($providedResource === "*" || $providedResource === $reqResource)
-            && $model->where($condition)->countAllResults() > 0;
+            && $model->whereIn($condition['key'], $condition['values'])->countAllResults() > 0;
     }
 
     /**
@@ -198,7 +183,7 @@ class Auth
             return false;
 
         // Regular expression pattern for matching `resource:field:value`, `resource:field`, or `resource::value`
-        $pattern = '/^[a-zA-Z0-9_]+(:[a-zA-Z0-9_]*)?(:[a-zA-Z0-9_]*)?$/';
+        $pattern = '/^[a-zA-Z0-9_]+(:[a-zA-Z0-9_]*)?(:[a-zA-Z0-9_,]*)?$/';
         // Validate the permission string against the pattern
         return (bool)preg_match($pattern, $permission->resource);
     }
@@ -207,24 +192,12 @@ class Auth
     /**
      * Extract JWT from the Authorization header.
      */
-    protected function extractToken()
+    public function extractToken()
     {
         // Step 1: Extract JWT from the Authorization header
         $authHeader = $this->request->header('Authorization');
         if (!$authHeader) {
-            return $this->unauthorizedResponse([
-                'error_code' => 1,
-                'message' => 'Token not provided'
-            ]);
-        }
-
-        // Step 2: Retrieve and validate the JWT
-        $token = $this->extractToken($authHeader);
-        if (!$token) {
-            return $this->unauthorizedResponse([
-                'error_code' => 1,
-                'message' => 'Token not provided'
-            ]);
+            throw new HTTPException('Token not provided', 403);
         }
 
         if (preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {

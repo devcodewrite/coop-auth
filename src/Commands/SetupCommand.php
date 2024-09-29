@@ -28,7 +28,7 @@ class SetupCommand extends BaseCommand
             $this->publishFilter();
         }
 
-        if (CLI::prompt('Do you want to publish the filter file?', ['y', 'n']) === 'y') {
+        if (CLI::prompt('Do you want to publish the helper file?', ['y', 'n']) === 'y') {
             $this->publishHelper();
         }
 

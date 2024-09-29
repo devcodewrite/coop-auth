@@ -43,4 +43,19 @@ class CoopAuth extends BaseConfig
         'users' => 'UserModel',
         'resources' => 'Resource'
     ];
+
+     /**
+     * --------------------------------------------------------------------------
+     * Condition Keys
+     * --------------------------------------------------------------------------
+     *
+     * @var array<string, string>
+     */
+    public $conditionKeys = [
+        'id',
+        'owner',
+        'username',
+        'society_id',
+        'assoc_id'
+    ];
 }
