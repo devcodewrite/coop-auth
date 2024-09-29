@@ -1,6 +1,6 @@
 <?php
 
-namespace Codewrite\CoopAuth\CoopAuth;
+namespace Codewrite\CoopAuth;
 
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
