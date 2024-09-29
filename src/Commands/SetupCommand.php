@@ -1,6 +1,6 @@
 <?php
 
-namespace CoopAuth\Commands;
+namespace Codewrite\CoopAuth;
 
 use CodeIgniter\CLI\BaseCommand;
 use CodeIgniter\CLI\CLI;
