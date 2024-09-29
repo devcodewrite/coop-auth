@@ -1,6 +1,6 @@
 <?php
 
-namespace Codewrite\CoopAuth;
+namespace Codewrite\CoopAuth\CoopAuth;
 
 class AuthException
 {

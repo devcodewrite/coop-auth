@@ -1,6 +1,6 @@
 <?php
 
-namespace Codewrite\CoopAuth;
+namespace Codewrite\CoopAuth\Config;
 
 use CodeIgniter\Config\BaseConfig;
 
