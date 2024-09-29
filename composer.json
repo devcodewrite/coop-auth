@@ -1,15 +1,31 @@
 {
-    "name": "codewrite/coop-auth",
-    "description": "A simple authentication library for CodeIgniter 4 using JWT.",
-    "type": "library",
-    "license": "MIT",
-    "autoload": {
-      "psr-4": {
-        "Codewrite\\CoopAuth\\": "src/"
-      }
-    },
-    "require": {
-      "php": ">=7.4",
-      "firebase/php-jwt": "^6.10"
+  "name": "codewrite/coop-auth",
+  "description": "A simple authentication library for CodeIgniter 4 using JWT.",
+  "type": "library",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Eric Mensah",
+      "email": "ericmensah@codewrite.org",
+      "homepage": "https://codewrite.org",
+      "role": "Developer"
+    }
+  ],
+  "autoload": {
+    "psr-4": {
+      "Codewrite\\CoopAuth\\": "src/"
+    }
+  },
+  "require": {
+    "php": ">=7.4",
+    "firebase/php-jwt": "^6.10",
+    "codeigniter4/framework": "^4.5"
+  },
+  "extra": {
+    "codeigniter4": {
+      "commands": [
+        "CoopAuth\\Commands\\SetupCommand"
+      ]
     }
   }
+}
