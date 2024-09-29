@@ -3,7 +3,6 @@
 namespace Codewrite\CoopAuth;
 
 use CodeIgniter\HTTP\Response;
-use Codewrite\CoopAuth\Exceptions\InvalidPermissionException;
 use Firebase\JWT\ExpiredException;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;

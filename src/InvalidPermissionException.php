@@ -1,6 +1,6 @@
 <?php
 
-namespace Codewrite\CoopAuth\Exceptions;
+namespace Codewrite\CoopAuth;
 
 use Exception;
 
