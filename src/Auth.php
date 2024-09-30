@@ -4,6 +4,7 @@ namespace Codewrite\CoopAuth;
 
 use CodeIgniter\HTTP\Exceptions\HTTPException;
 use CodeIgniter\Model;
+use Exception;
 use Firebase\JWT\ExpiredException;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
@@ -13,11 +14,7 @@ class Auth
 {
     private $request;
 
-    private $response;
-
     public $config;
-
-    protected $sub;
 
     public function __construct()
     {
@@ -45,15 +42,7 @@ class Auth
      */
     public function decodeToken(string $token): stdClass
     {
-        try {
-            return JWT::decode($token, new Key($this->config->jwtSecret, $this->config->algorithm));
-        } catch (ExpiredException $e) {
-            // Handle expired token exception
-            throw new ExpiredException("Expired token");
-        } catch (\Exception $e) {
-            // Handle other JWT exceptions
-            throw new HTTPException("Invalid token!", 403);
-        }
+        return JWT::decode($token, new Key($this->config->jwtSecret, $this->config->algorithm));
     }
 
     /**
@@ -129,32 +118,39 @@ class Auth
      * $condition a string of the form feild:value that will be check
      * on the model connected to the resource to see if it matches
      */
-    public function can($action, $resource, Model &$model = null): bool
+    public function can($action, $resource, Model &$model = null): GuardReponse
     {
-        // Retrieve permissions from the decoded JWT
-        $permissions = $this->permissions();
-        $check = false;
+        try {
+            // Retrieve permissions from the decoded JWT
+            $permissions = $this->permissions();
+            $check = false;
 
-        foreach ($permissions as $key => $permission) {
-            if (!$this->isValidPermission($permission))
-                throw new InvalidPermissionException();
+            foreach ($permissions as $key => $permission) {
+                if (!$this->isValidPermission($permission))
+                    return new GuardReponse(false, ErrorResponse::INVALID_PERMISSION);
 
-            if (!in_array($action, $permission->actions)) return false;
+                if (!in_array($action, $permission->actions))
+                    return new GuardReponse(false, ErrorResponse::INVALID_PERMISSION);;
 
-            $parts = explode(':', $permission->resource);
-            if (count($parts) <= 2)
-                return $this->validateConditions($parts[0], $resource);
+                $parts = explode(':', $permission->resource);
+                if (count($parts) <= 2)
+                    return new GuardReponse($this->validateConditions($parts[0], $resource), ErrorResponse::INVALID_PERMISSION);
 
-            if (!in_array($parts[1], $this->config->conditionKeys))
-                throw new InvalidConditionKeyException();
+                if (!in_array($parts[1], $this->config->conditionKeys))
+                    return new GuardReponse(false, ErrorResponse::INVALID_CONDITION_KEY);
 
-            $condition = ['key' => $parts[1], 'values' => explode(',', $parts[2])];
+                $condition = ['key' => $parts[1], 'values' => explode(',', $parts[2])];
 
-            $check = $check || $this->validateConditions($parts[0], $resource, $condition);
+                $check = $check || $this->validateConditions($parts[0], $resource, $condition);
 
-            if ($check && $model) $model->whereIn($parts[1], $condition['values']);
+                if ($check && $model) $model->whereIn($parts[1], $condition['values']);
+            }
+            return new GuardReponse($check, ErrorResponse::INVALID_PERMISSION);
+        } catch (ExpiredException $e) {
+            return new GuardReponse(false, ErrorResponse::TOKEN_EXPIRED);
+        } catch (Exception $e) {
+            return new GuardReponse(false, ErrorResponse::INVALID_TOKEN);
         }
-        return $check;
     }
 
     protected function validateConditions($providedResource, $reqResource, $condition = null): bool

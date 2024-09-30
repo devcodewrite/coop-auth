@@ -19,7 +19,7 @@ class JwtFilter implements FilterInterface
     {
         // Map HTTP Method to Action
         $httpToActionMap = [
-            'GET' => 'read',
+            'GET' => 'view',
             'POST' => 'create',
             'PUT' => 'update',
             'PATCH' => 'update',
@@ -27,12 +27,7 @@ class JwtFilter implements FilterInterface
         ];
 
         $requestedAction = $httpToActionMap[$request->getMethod()] ?? null;
-        try {
-            if (!auth()->can($requestedAction, $request->getUri()->getSegment(1)))
-                $this->forbiddenResponse(['message' => 'No permission to access this resource!']);
-        } catch (\Exception $th) {
-            $this->unauthorizedResponse(['message' => $th->getMessage()]);
-        }
+        return auth()->can($requestedAction, $request->getUri()->getSegment(1))->responsed();
     }
 
     /**
@@ -42,13 +37,13 @@ class JwtFilter implements FilterInterface
     {
         // No action needed after the controller is executed for REST API
     }
-    
+
     /**
      * Return a 401 Unauthorized response.
      */
     private function unauthorizedResponse($data)
     {
-        return $this->respond($data, Response::HTTP_UNAUTHORIZED);
+        return response()->setJSON($data)->setStatusCode(Response::HTTP_UNAUTHORIZED);
     }
 
     /**
@@ -56,6 +51,6 @@ class JwtFilter implements FilterInterface
      */
     private function forbiddenResponse($data)
     {
-        return $this->respond($data, Response::HTTP_FORBIDDEN);
+        return response()->setJSON($data)->setStatusCode(Response::HTTP_FORBIDDEN);
     }
 }
