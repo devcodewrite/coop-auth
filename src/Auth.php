@@ -132,6 +132,9 @@ class Auth
      */
     private function evaluateConditions($permissionConditions, $requestConditions)
     {
+        if ($requestConditions === null || count($requestConditions ?? []) === 0)
+            return new GuardReponse(true, CoopResponse::OK);
+
         // 1. Evaluate "denied" conditions first
         if (!empty($permissionConditions['denied'])) {
             foreach ($permissionConditions['denied'] as $key => $deniedValues) {

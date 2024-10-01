@@ -9,6 +9,8 @@ class CoopResponse implements CoopResponseInterface
 {
     protected $message;
     protected $code;
+    protected $status;
+    protected $error;
 
     protected $httpStatusMap = [
         0   => Response::HTTP_OK,
@@ -44,33 +46,21 @@ class CoopResponse implements CoopResponseInterface
     {
         $this->message  = $message;
         $this->code     = $code;
-        if (!$status) {
-            $this->response = response()->setJSON([
-                'status' => false,
-                'code' => $code,
-                'message' => $message === "" ? $this->httpMessageMap[$code] : $message,
-                'error' => $error
-            ])->setStatusCode(
-                $this->httpStatusMap[$code],
-                $this->httpMessageMap[$code]
-            );
-        }
+        $this->status   = $status;
+        $this->error    = $error;
     }
 
     public function responsed(string $message = null, $error = null): ResponseInterface | null
     {
-        if ($message) {
-            return response()->setJSON([
-                'status' => false,
-                'code' => $this->code,
-                'message' => $message === "" ? $this->httpMessageMap[$this->code] : $message,
-                'error' => $error
-            ])->setStatusCode(
-                $this->httpStatusMap[$this->code],
-                $this->httpMessageMap[$this->code]
-            );
-        }
-
+        return response()->setJSON([
+            'status' => $this->status,
+            'code' => $this->code,
+            'message' => $message ? $message : $this->httpMessageMap[$this->code],
+            'error' => $error ? $error : $this->error
+        ])->setStatusCode(
+            $this->httpStatusMap[$this->code],
+            $this->httpMessageMap[$this->code]
+        );
         return $this->response;
     }
 }

@@ -23,11 +23,7 @@ class SetupCommand extends BaseCommand
         if (CLI::prompt('Do you want to publish the configuration file?', ['y', 'n']) === 'y') {
             $this->publishConfig();
         }
-        // Ask for confirmation to publish config file.
-        if (CLI::prompt('Do you want to publish the filter file?', ['y', 'n']) === 'y') {
-            $this->publishFilter();
-        }
-
+     
         if (CLI::prompt('Do you want to publish the helper file?', ['y', 'n']) === 'y') {
             $this->publishHelper();
         }
@@ -56,30 +52,6 @@ class SetupCommand extends BaseCommand
             CLI::write("Configuration file published to `app/Config/CoopAuth.php`", 'yellow');
         } else {
             CLI::error("Failed to publish configuration file.");
-        }
-    }
-
-    /**
-     * Publishes the configuration file to the CodeIgniter project.
-     */
-    protected function publishFilter()
-    {
-        // Get the current path of the config file in the package.
-        $source = __DIR__ . '/../Filters/JwtFilter.php';
-
-        // Determine the destination path in the target CodeIgniter project.
-        $destination = ROOTPATH . 'app/Filters/JwtFilter.php';
-
-        // Copy the config file.
-        if (! is_file($source)) {
-            CLI::error('Filter file not found.');
-            return;
-        }
-
-        if (copy($source, $destination)) {
-            CLI::write("Filter file published to `app/Filters/JwtFilter.php`", 'yellow');
-        } else {
-            CLI::error("Failed to publish fitler file.");
         }
     }
 

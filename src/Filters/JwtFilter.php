@@ -27,7 +27,9 @@ class JwtFilter implements FilterInterface
         ];
 
         $requestedAction = $httpToActionMap[$request->getMethod()] ?? null;
-        return auth()->can($requestedAction, $request->getUri()->getSegment(1))->responsed();
+        $response = auth()->can($requestedAction, $request->getUri()->getSegment(1),null);
+        if($response->denied())
+        return $response->responsed();
     }
 
     /**
