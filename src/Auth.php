@@ -130,11 +130,11 @@ class Auth
                     return new GuardReponse(false, ErrorResponse::INVALID_PERMISSION);
 
                 if (!in_array($action, $permission->actions))
-                    return new GuardReponse(false, ErrorResponse::INVALID_PERMISSION);;
+                    return new GuardReponse(false, ErrorResponse::UNAUTHORIZED);;
 
                 $parts = explode(':', $permission->resource);
                 if (count($parts) <= 2)
-                    return new GuardReponse($this->validateConditions($parts[0], $resource), ErrorResponse::INVALID_PERMISSION);
+                    return new GuardReponse($this->validateConditions($parts[0], $resource), ErrorResponse::UNAUTHORIZED);
 
                 if (!in_array($parts[1], $this->config->conditionKeys))
                     return new GuardReponse(false, ErrorResponse::INVALID_CONDITION_KEY);
@@ -145,7 +145,7 @@ class Auth
 
                 if ($check && $model) $model->whereIn($parts[1], $condition['values']);
             }
-            return new GuardReponse($check, ErrorResponse::INVALID_PERMISSION);
+            return new GuardReponse($check, ErrorResponse::UNAUTHORIZED);
         } catch (ExpiredException $e) {
             return new GuardReponse(false, ErrorResponse::TOKEN_EXPIRED);
         } catch (Exception $e) {
@@ -183,7 +183,6 @@ class Auth
         // Validate the permission string against the pattern
         return (bool)preg_match($pattern, $permission->resource);
     }
-
 
     /**
      * Extract JWT from the Authorization header.

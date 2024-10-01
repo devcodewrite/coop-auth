@@ -14,4 +14,7 @@ interface ErrorResponseInterface
     public const INVALID_CONDITION_KEY  = 5;    // invalid condition key
     public const UNAUTHORIZED           = 6;    // authorized access
     public const INVALID_PERMISSION     = 7;    // invalid permission 
+    public const INSUFFICIENT_SCOPE     = 8;    // Insufficent scopes
+    public const DATA_NOT_FOUND         = 9;    // Data not found
+    public const INVALID_COLUMNS        = 10;   // Invalid query columns
 }

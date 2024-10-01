@@ -41,7 +41,7 @@ class CoopAuth extends BaseConfig
      */
     public $resources = [
         'users' => 'UserModel',
-        'resources' => 'Resource'
+        'resources' => 'ResourceModel'
     ];
 
      /**

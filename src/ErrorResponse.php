@@ -10,16 +10,19 @@ class ErrorResponse implements ErrorResponseInterface
     protected $message;
     protected $code;
     protected $httpStatusMap = [
-        1 => Response::HTTP_NOT_FOUND,
-        2 => Response::HTTP_FORBIDDEN,
-        3 => Response::HTTP_FORBIDDEN,
-        4 => Response::HTTP_FORBIDDEN,
-        5 => Response::HTTP_FORBIDDEN,
-        6 => Response::HTTP_UNAUTHORIZED,
-        7 => Response::HTTP_UNAUTHORIZED,
+        1   => Response::HTTP_NOT_FOUND,
+        2   => Response::HTTP_FORBIDDEN,
+        3   => Response::HTTP_FORBIDDEN,
+        4   => Response::HTTP_FORBIDDEN,
+        5   => Response::HTTP_FORBIDDEN,
+        6   => Response::HTTP_UNAUTHORIZED,
+        7   => Response::HTTP_UNAUTHORIZED,
+        8   => Response::HTTP_UNAUTHORIZED,
+        9   => Response::HTTP_NOT_FOUND,
+        10  => Response::HTTP_BAD_REQUEST
     ];
 
-    protected $httpMessageMap = [
+    public $httpMessageMap = [
         1 => "Resource not found",
         2 => "Token not provided",
         3 => "Invalid token",
@@ -27,19 +30,23 @@ class ErrorResponse implements ErrorResponseInterface
         5 => "Invalid condition key",
         6 => "Authorized access",
         7 => "Invalid permission",
+        8 => "Insufficient scope",
+        9 => "Data not found",
+        10 => "Invalid query param columns"
     ];
 
     public $response;
 
-    public function __construct(bool $status, int $code, string $message = "")
+    public function __construct(bool $status, int $code, string $message = "",array $error = [])
     {
         $this->message  = $message;
         $this->code     = $code;
-        if ($status) {
+        if (!$status) {
             $this->response = response()->setJSON([
-                'message' => $message,
+                'status' => false,
                 'code' => $code,
-                'status' => false
+                'message' => $message === "" ? $this->httpMessageMap[$code] : $message,
+               'error' => $error
             ])->setStatusCode(
                 $this->httpStatusMap[$code],
                 $this->httpMessageMap[$code]
@@ -47,7 +54,7 @@ class ErrorResponse implements ErrorResponseInterface
         }
     }
 
-    public function responsed(): ResponseInterface
+    public function responsed(): ResponseInterface | null
     {
         return $this->response;
     }
