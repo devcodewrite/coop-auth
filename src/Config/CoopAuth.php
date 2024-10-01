@@ -6,7 +6,7 @@ use CodeIgniter\Config\BaseConfig;
 
 class CoopAuth extends BaseConfig
 {
-       /**
+    /**
      * --------------------------------------------------------------------------
      * JWT Secret
      * --------------------------------------------------------------------------
@@ -21,7 +21,7 @@ class CoopAuth extends BaseConfig
 
     public $userModelName = 'UserModel';
 
-     /**
+    /**
      * --------------------------------------------------------------------------
      * Resources
      * --------------------------------------------------------------------------
@@ -44,7 +44,7 @@ class CoopAuth extends BaseConfig
         'resources' => 'ResourceModel'
     ];
 
-     /**
+    /**
      * --------------------------------------------------------------------------
      * Condition Keys
      * --------------------------------------------------------------------------
@@ -57,5 +57,19 @@ class CoopAuth extends BaseConfig
         'username',
         'society_id',
         'assoc_id'
+    ];
+
+    /**
+     * --------------------------------------------------------------------------
+     * Microservices Endpoints
+     * --------------------------------------------------------------------------
+     *
+     * @var array<string, string>
+     */
+    public $services = [
+        'accounts' => "http://localhost:8080",
+        'cooporatives' => "http://localhost:8081",
+        'transactions' => "http://localhost:8082",
+        'billings' => "http://localhost:8083"
     ];
 }

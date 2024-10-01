@@ -5,11 +5,13 @@ namespace Codewrite\CoopAuth;
 use CodeIgniter\HTTP\Response;
 use CodeIgniter\HTTP\ResponseInterface;
 
-class ErrorResponse implements ErrorResponseInterface
+class CoopResponse implements CoopResponseInterface
 {
     protected $message;
     protected $code;
+    
     protected $httpStatusMap = [
+        0   => Response::HTTP_OK,
         1   => Response::HTTP_NOT_FOUND,
         2   => Response::HTTP_FORBIDDEN,
         3   => Response::HTTP_FORBIDDEN,
@@ -23,6 +25,7 @@ class ErrorResponse implements ErrorResponseInterface
     ];
 
     public $httpMessageMap = [
+        0 => "Ok",
         1 => "Resource not found",
         2 => "Token not provided",
         3 => "Invalid token",
@@ -37,7 +40,7 @@ class ErrorResponse implements ErrorResponseInterface
 
     public $response;
 
-    public function __construct(bool $status, int $code, string $message = "",array $error = [])
+    public function __construct(bool $status, int $code, string $message = "", array $error = null)
     {
         $this->message  = $message;
         $this->code     = $code;
@@ -46,7 +49,7 @@ class ErrorResponse implements ErrorResponseInterface
                 'status' => false,
                 'code' => $code,
                 'message' => $message === "" ? $this->httpMessageMap[$code] : $message,
-               'error' => $error
+                'error' => $error
             ])->setStatusCode(
                 $this->httpStatusMap[$code],
                 $this->httpMessageMap[$code]
@@ -54,8 +57,20 @@ class ErrorResponse implements ErrorResponseInterface
         }
     }
 
-    public function responsed(): ResponseInterface | null
+    public function responsed(string $message = null, $error = null): ResponseInterface | null
     {
+        if ($message) {
+            return response()->setJSON([
+                'status' => false,
+                'code' => $this->code,
+                'message' => $message === "" ? $this->httpMessageMap[$this->code] : $message,
+                'error' => $error
+            ])->setStatusCode(
+                $this->httpStatusMap[$this->code],
+                $this->httpMessageMap[$this->code]
+            );
+        }
+
         return $this->response;
     }
 }

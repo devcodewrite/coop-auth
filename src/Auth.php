@@ -127,29 +127,32 @@ class Auth
 
             foreach ($permissions as $key => $permission) {
                 if (!$this->isValidPermission($permission))
-                    return new GuardReponse(false, ErrorResponse::INVALID_PERMISSION);
+                    return new GuardReponse(false, CoopResponse::INVALID_PERMISSION);
+
+                if (!isset($permission->actions))
+                    return new GuardReponse(true, CoopResponse::OK);
 
                 if (!in_array($action, $permission->actions))
-                    return new GuardReponse(false, ErrorResponse::UNAUTHORIZED);;
+                    return new GuardReponse(false, CoopResponse::UNAUTHORIZED);;
 
                 $parts = explode(':', $permission->resource);
                 if (count($parts) <= 2)
-                    return new GuardReponse($this->validateConditions($parts[0], $resource), ErrorResponse::UNAUTHORIZED);
+                    return new GuardReponse($this->validateConditions($parts[0], $resource), CoopResponse::UNAUTHORIZED);
 
                 if (!in_array($parts[1], $this->config->conditionKeys))
-                    return new GuardReponse(false, ErrorResponse::INVALID_CONDITION_KEY);
+                    return new GuardReponse(false, CoopResponse::INVALID_CONDITION_KEY);
 
                 $condition = ['key' => $parts[1], 'values' => explode(',', $parts[2])];
 
                 $check = $check || $this->validateConditions($parts[0], $resource, $condition);
 
-                if ($check && $model) $model->whereIn($parts[1], $condition['values']);
+                if ($check && $model) $check = $model->whereIn($parts[1], $condition['values'])->countAllResults(false) > 0;
             }
-            return new GuardReponse($check, ErrorResponse::UNAUTHORIZED);
+            return new GuardReponse($check, CoopResponse::UNAUTHORIZED);
         } catch (ExpiredException $e) {
-            return new GuardReponse(false, ErrorResponse::TOKEN_EXPIRED);
+            return new GuardReponse(false, CoopResponse::TOKEN_EXPIRED);
         } catch (Exception $e) {
-            return new GuardReponse(false, ErrorResponse::INVALID_TOKEN);
+            return new GuardReponse(false, CoopResponse::INVALID_TOKEN);
         }
     }
 
@@ -161,7 +164,7 @@ class Auth
         $model = model($this->config->resources[$reqResource]);
 
         return ($providedResource === "*" || $providedResource === $reqResource)
-            && $model->whereIn($condition['key'], $condition['values'])->countAllResults() > 0;
+            && $model->whereIn($condition['key'], $condition['values'])->countAllResults(false) > 0;
     }
 
     /**
@@ -179,7 +182,7 @@ class Auth
             return false;
 
         // Regular expression pattern for matching `resource:field:value`, `resource:field`, or `resource::value`
-        $pattern = '/^[a-zA-Z0-9_]+(:[a-zA-Z0-9_]*)?(:[a-zA-Z0-9_,]*)?$/';
+        $pattern = '/^[a-zA-Z0-9_*]+(:[a-zA-Z0-9_]*)?(:[a-zA-Z0-9_,]*)?$/';
         // Validate the permission string against the pattern
         return (bool)preg_match($pattern, $permission->resource);
     }

@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace Codewrite\CoopAuth;
 
 
-interface ErrorResponseInterface
+interface CoopResponseInterface
 {
+    public const OK                     = 0;    // Ok
     public const NOT_FOUND              = 1;    // resource not found
     public const TOKEN_NOT_PROVIDED     = 2;    // token not provided
     public const INVALID_TOKEN          = 3;    // invalid token
