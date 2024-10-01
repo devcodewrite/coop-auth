@@ -9,7 +9,7 @@ class CoopResponse implements CoopResponseInterface
 {
     protected $message;
     protected $code;
-    
+
     protected $httpStatusMap = [
         0   => Response::HTTP_OK,
         1   => Response::HTTP_NOT_FOUND,
@@ -30,7 +30,7 @@ class CoopResponse implements CoopResponseInterface
         2 => "Token not provided",
         3 => "Invalid token",
         4 => "Token expired",
-        5 => "Invalid condition key",
+        5 => "Action not allowed",
         6 => "Authorized access",
         7 => "Invalid permission",
         8 => "Insufficient scope",

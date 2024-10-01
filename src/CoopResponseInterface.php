@@ -12,7 +12,7 @@ interface CoopResponseInterface
     public const TOKEN_NOT_PROVIDED     = 2;    // token not provided
     public const INVALID_TOKEN          = 3;    // invalid token
     public const TOKEN_EXPIRED          = 4;    // token expired
-    public const INVALID_CONDITION_KEY  = 5;    // invalid condition key
+    public const ACTION_NOT_ALLOWED     = 5;    // action not allowed
     public const UNAUTHORIZED           = 6;    // authorized access
     public const INVALID_PERMISSION     = 7;    // invalid permission 
     public const INSUFFICIENT_SCOPE     = 8;    // Insufficent scopes

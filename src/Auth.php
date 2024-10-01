@@ -82,33 +82,6 @@ class Auth
         return $userModel->find($user_id);
     }
 
-    // return array of permissions
-    public function permissions(): array
-    {
-        $token = $this->extractToken();
-        $claims = $this->decodeToken($token);
-
-        return $claims->permissions ?? [];
-    }
-
-    // return array of roles
-    public function roles(): array
-    {
-        $token = $this->extractToken();
-        $claims = $this->decodeToken($token);
-
-        return $claims->roles ?? [];
-    }
-
-    // return array of resources
-    public function resources(): array
-    {
-        $token = $this->extractToken();
-        $claims = $this->decodeToken($token);
-
-        return $claims->resources ?? [];
-    }
-
     /** 
      * Check if the user has the specified permission
      * $action http request method being executed.
@@ -118,73 +91,124 @@ class Auth
      * $condition a string of the form feild:value that will be check
      * on the model connected to the resource to see if it matches
      */
-    public function can($action, $resource, Model &$model = null): GuardReponse
+    public function can($action, $resource, $conditions): GuardReponse
     {
         try {
+            // get token
+            $token = $this->extractToken();
+            // get claims
+            $claims = (array)$this->decodeToken($token);
+
             // Retrieve permissions from the decoded JWT
-            $permissions = $this->permissions();
-            $check = false;
+            $permissions = $claims->permissions ?? [];
 
-            foreach ($permissions as $key => $permission) {
-                if (!$this->isValidPermission($permission))
-                    return new GuardReponse(false, CoopResponse::INVALID_PERMISSION);
+            if (!isset($permissions[$resource]))
+                return new GuardReponse(false, CoopResponse::INVALID_PERMISSION);
 
-                if (!isset($permission->actions))
-                    return new GuardReponse(true, CoopResponse::OK);
+            $resourcePermissions = $permissions[$resource];
+            $allowedActions = $resourcePermissions['actions'] ?? [];
 
-                if (!in_array($action, $permission->actions))
-                    return new GuardReponse(false, CoopResponse::UNAUTHORIZED);;
-
-                $parts = explode(':', $permission->resource);
-                if (count($parts) <= 2)
-                    return new GuardReponse($this->validateConditions($parts[0], $resource), CoopResponse::UNAUTHORIZED);
-
-                if (!in_array($parts[1], $this->config->conditionKeys))
-                    return new GuardReponse(false, CoopResponse::INVALID_CONDITION_KEY);
-
-                $condition = ['key' => $parts[1], 'values' => explode(',', $parts[2])];
-
-                $check = $check || $this->validateConditions($parts[0], $resource, $condition);
-
-                if ($check && $model) $check = $model->whereIn($parts[1], $condition['values'])->countAllResults(false) > 0;
+            if (!in_array($action, $allowedActions)) {
+                return  new GuardReponse(false, CoopResponse::INVALID_PERMISSION); // Action not allowed
             }
-            return new GuardReponse($check, CoopResponse::UNAUTHORIZED);
+
+            // Check conditions if provided
+            if (!empty($resourcePermissions['conditions'])) {
+                return $this->evaluateConditions($resourcePermissions['conditions'], $conditions);
+            }
+            return new GuardReponse(true, CoopResponse::OK);
         } catch (ExpiredException $e) {
             return new GuardReponse(false, CoopResponse::TOKEN_EXPIRED);
+        } catch (HTTPException $e) {
+            return new GuardReponse(false, CoopResponse::TOKEN_NOT_PROVIDED);
         } catch (Exception $e) {
             return new GuardReponse(false, CoopResponse::INVALID_TOKEN);
         }
     }
 
-    protected function validateConditions($providedResource, $reqResource, $condition = null): bool
+    /**
+     * Evaluate the conditions for a resource
+     * For example, check if a given `id` is allowed based on the `conditions`
+     */
+    private function evaluateConditions($permissionConditions, $requestConditions)
     {
-        if (!$condition)
-            return $providedResource === "*" || $providedResource === $reqResource;
+        // 1. Evaluate "denied" conditions first
+        if (!empty($permissionConditions['denied'])) {
+            foreach ($permissionConditions['denied'] as $key => $deniedValues) {
+                $requestValue = $requestConditions[$key] ?? null;
+                if ($requestValue && in_array($requestValue, $deniedValues)) {
+                    // Denied condition met, access forbidden
+                    return new GuardReponse(false, CoopResponse::UNAUTHORIZED);
+                }
+            }
+        }
 
-        $model = model($this->config->resources[$reqResource]);
+        // 2. Evaluate "allowed" conditions if "denied" conditions are not met
+        if (!empty($permissionConditions['allowed'])) {
+            foreach ($permissionConditions['allowed'] as $key => $allowedValues) {
+                $requestValue = $requestConditions[$key] ?? null;
+                if ($requestValue && !in_array($requestValue, $allowedValues)) {
+                    // Allowed condition not met
+                    return new GuardReponse(false, CoopResponse::UNAUTHORIZED);
+                }
+            }
+        }
 
-        return ($providedResource === "*" || $providedResource === $reqResource)
-            && $model->whereIn($condition['key'], $condition['values'])->countAllResults(false) > 0;
+        // All conditions are satisfied
+        return new GuardReponse(true, CoopResponse::OK);
     }
 
     /**
-     * Checks if a given permission string is valid.
+     * Apply the permissions conditions to a model's query.
+     * Dynamically modify the query builder to enforce allowed and denied conditions.
      *
-     * @param object $permission The permission object to validate.
-     * @return bool True if valid, false otherwise.
+     * @param Model $model
+     * @param string $resource
+     * @return Model
      */
-    protected function isValidPermission(object $permission): bool
+    public function applyConditionsToModel(Model &$model, $resource)
     {
-        if (
-            !$permission || gettype($permission->actions) !== 'array'
-            || gettype($permission->resource) !== 'string'
-        )
-            return false;
+        try {
+            // get token
+            $token = $this->extractToken();
+            // get claims
+            $claims = (array)$this->decodeToken($token);
 
-        // Regular expression pattern for matching `resource:field:value`, `resource:field`, or `resource::value`
-        $pattern = '/^[a-zA-Z0-9_*]+(:[a-zA-Z0-9_]*)?(:[a-zA-Z0-9_,]*)?$/';
-        // Validate the permission string against the pattern
-        return (bool)preg_match($pattern, $permission->resource);
+            // Retrieve permissions from the decoded JWT
+            $permissions = $claims->permissions ?? [];
+
+            if (!isset($permissions[$resource]))
+                return $model; // No permissions for this resource, return the model unmodified
+
+
+            $resourcePermissions = $permissions[$resource];
+            $conditions = $resourcePermissions['conditions'] ?? [];
+
+            // Build the query based on allowed and denied conditions
+            $allowedConditions = $conditions['allowed'] ?? [];
+            $deniedConditions = $conditions['denied'] ?? [];
+
+            // Apply "denied" conditions to exclude records
+            foreach ($deniedConditions as $key => $values) {
+                if (is_array($values)) {
+                    $model = $model->whereNotIn($key, $values);
+                } else {
+                    $model = $model->where("$key !=", $values);
+                }
+            }
+
+            // Apply "allowed" conditions to restrict to specific records
+            foreach ($allowedConditions as $key => $values) {
+                if (is_array($values)) {
+                    $model = $model->whereIn($key, $values);
+                } else {
+                    $model = $model->where($key, $values);
+                }
+            }
+            return $model;
+        } catch (Exception $e) {
+        }
+        return false;
     }
 
     /**
