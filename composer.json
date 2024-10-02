@@ -13,7 +13,8 @@
   ],
   "autoload": {
     "psr-4": {
-      "Codewrite\\CoopAuth\\": "src/"
+      "Codewrite\\CoopAuth\\": "src/",
+      "Zenoph\\Notify\\":"Zenoph/Notify/"
     }
   },
   "require": {
