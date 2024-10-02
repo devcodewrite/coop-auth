@@ -16,23 +16,124 @@ class Auth
 
     public $config;
 
+    public $userModel;
+
+    public $userRoleModel;
+
+    public $permissionModel;
+
+    public $resourceModel;
+
+    public $userGroupModel;
+
+    public $groupRoleModel;
+
+
     public function __construct()
     {
         $this->config   = config('coopauth');
         $this->request  = service('request');
         $this->response = service('response');
+
+        $this->userModel        = model($this->config->authModels['UserModel']);
+        $this->userRoleModel    = model($this->config->authModels['UserRoleModel']);
+        $this->permissionModel  = model($this->config->authModels['PermissionModel']);
+        $this->resourceModel    = model($this->config->authModels['ResourceModel']);
+        $this->userGroupModel   = model($this->config->authModels['UserGroupModel']);
+        $this->groupRoleModel   = model($this->config->authModels['GroupRoleModel']);
+    }
+
+    /**
+     * Generate permissions JSON for a given user ID.
+     *
+     * @param string $userId
+     * @return array
+     */
+    public function generatePermissions($userId)
+    {
+        // Step 1: Get User Roles
+        $roles = $this->userRoleModel->where('user_id', $userId)->findAll();
+        $roleIds = array_column($roles, 'role_id');
+        // getting group roles
+        $userGroups = $this->userGroupModel->where('user_id', $userId)->findAll();
+        $groupIds = array_column($userGroups, 'group_id');
+        $groupRoles = $this->groupRoleModel->whereIn('group_id', array_merge([''], $groupIds))->findAll();
+        // adding group role ids to groups id
+        $roleIds = array_merge($roleIds, array_column($groupRoles, 'role_id'));
+
+        if (empty($roleIds)) {
+            return ['permissions' => []]; // No roles assigned, return empty permissions
+        }
+
+        // Step 2: Get Permissions for User Roles
+        $permissionsData = $this->permissionModel
+            ->whereIn('role_id', $roleIds)
+            ->findAll();
+
+        // Step 3: Get Resources Data
+        $resourceIds = array_unique(array_column($permissionsData, 'resource_id'));
+        $resources = $this->resourceModel->whereIn('id', $resourceIds)->findAll();
+        $resourceMap = [];
+        foreach ($resources as $resource) {
+            $resourceMap[$resource->id] = $resource->id;
+        }
+
+        // Step 4: Build Permissions Structure
+        $permissions = [];
+
+        foreach ($permissionsData as $permission) {
+            $resourceName = $resourceMap[$permission->resource_id] ?? null;
+            if (!$resourceName) {
+                continue; // Skip if the resource is not found
+            }
+
+            // Prepare the permission structure for the resource
+            $permissionEntry = [
+                'actions' => json_decode($permission->actions, true),
+                'conditions' => json_decode($permission->conditions, true)
+            ];
+
+            if (!isset($permissions[$resourceName])) {
+                $permissions[$resourceName] = [];
+            }
+
+            // Add the permission entry to the resource
+            $permissions[$resourceName][] = $permissionEntry;
+        }
+
+        // Step 5: Format the Permission JSON
+        $permissionJson = [
+            'sub' => $userId,
+            'permissions' => $permissions
+        ];
+
+        return $permissionJson;
     }
 
     /**
      * Generates a JWT token for a given user
      */
-    public function generateToken(array $payload): string
+    public function generateAccessToken(array $payload): string
     {
         $payload = array_merge([
             'iss' => 'localhost',
             'iat' => time(),
             'nbf' => time(),
-            'exp' => $this->config->tokenExpiry,
+            'exp' => time() + $this->config->tokenExpiry,
+        ], $payload);
+        return JWT::encode($payload, $this->config->jwtSecret, $this->config->algorithm);
+    }
+
+    /**
+     * Generates a JWT token for a given user
+     */
+    public function generateRefreshToken(array $payload): string
+    {
+        $payload = array_merge([
+            'iss' => 'localhost',
+            'iat' => time(),
+            'nbf' => time(),
+            'exp' => time() + $this->config->refreshTokenExpiry,
         ], $payload);
         return JWT::encode($payload, $this->config->jwtSecret, $this->config->algorithm);
     }
@@ -48,17 +149,15 @@ class Auth
     /**
      * Refresh a given JWT token
      */
-    public function refreshToken(string $refreshToken, $payload): string
+    public function refreshToken(string $refreshToken, array $payload): string
     {
-        $payload = $this->decodeToken($refreshToken);
-
         $payload = array_merge([
             'iss' => site_url(),
             'iat' => time(),
             'nbf' => time(),
-            'exp' => $this->config->tokenExpiry,
+            'exp' => time() + $this->config->tokenExpiry,
         ], $payload);
-        return JWT::encode($payload, $this->config->secretKey, $this->config->algorithm);
+        return JWT::encode($payload, $this->config->jwtSecret, $this->config->algorithm);
     }
 
     // Get the current user id
@@ -71,15 +170,12 @@ class Auth
     }
 
     // Get the current user data
-    public function user(): stdClass | null
+    public function user()
     {
-        // Check if UserModel exists
-        $namespace = '\\App\\Models\\' . $this->config->userModelName;
-        if (!class_exists($namespace)) return null;
+        if (!$this->userModel) return null;
 
         $user_id = $this->user_id();
-        $userModel = model($this->config->userModelName);
-        return $userModel->find($user_id);
+        return $this->userModel->find($user_id);
     }
 
     /** 
@@ -91,32 +187,43 @@ class Auth
      * $condition a string of the form feild:value that will be check
      * on the model connected to the resource to see if it matches
      */
-    public function can($action, $resource, $conditions): GuardReponse
+    public function can(string $action, string $resource, array $conditions = null): GuardReponse
     {
         try {
             // get token
             $token = $this->extractToken();
             // get claims
-            $claims = (array)$this->decodeToken($token);
+            $claims = $this->decodeToken($token);
 
             // Retrieve permissions from the decoded JWT
             $permissions = $claims->permissions ?? [];
 
-            if (!isset($permissions[$resource]))
+            if (!isset($permissions->{$resource}))
+                return new GuardReponse(false, CoopResponse::UNAUTHORIZED);
+
+            $resourcePermissions = $permissions->{$resource};
+
+            if (gettype($resourcePermissions) !== 'array')
                 return new GuardReponse(false, CoopResponse::INVALID_PERMISSION);
 
-            $resourcePermissions = $permissions[$resource];
-            $allowedActions = $resourcePermissions['actions'] ?? [];
+            foreach ($resourcePermissions as $resourcePermission) {
+                $allowedActions = $resourcePermission->{'actions'} ?? [];
+                if (
+                    in_array($action, $allowedActions)
+                    && !empty($resourcePermission->{'conditions'})
+                    && $this->evaluateConditions($resourcePermission->{'conditions'}, $conditions)
+                ) {
+                    return new GuardReponse(true, CoopResponse::OK);
+                }
 
-            if (!in_array($action, $allowedActions)) {
-                return  new GuardReponse(false, CoopResponse::INVALID_PERMISSION); // Action not allowed
+                if (
+                    in_array($action, $allowedActions)
+                    && empty($resourcePermission->{'conditions'})
+                ) {
+                    return new GuardReponse(true, CoopResponse::OK);
+                }
             }
-
-            // Check conditions if provided
-            if (!empty($resourcePermissions['conditions'])) {
-                return $this->evaluateConditions($resourcePermissions['conditions'], $conditions);
-            }
-            return new GuardReponse(true, CoopResponse::OK);
+            return new GuardReponse(false, CoopResponse::UNAUTHORIZED);
         } catch (ExpiredException $e) {
             return new GuardReponse(false, CoopResponse::TOKEN_EXPIRED);
         } catch (HTTPException $e) {
@@ -133,32 +240,43 @@ class Auth
     private function evaluateConditions($permissionConditions, $requestConditions)
     {
         if ($requestConditions === null || count($requestConditions ?? []) === 0)
-            return new GuardReponse(true, CoopResponse::OK);
+            return true;
 
         // 1. Evaluate "denied" conditions first
-        if (!empty($permissionConditions['denied'])) {
-            foreach ($permissionConditions['denied'] as $key => $deniedValues) {
+        if (!empty($permissionConditions->{'denied'})) {
+            foreach ($permissionConditions->{'denied'} as $key => $deniedValues) {
                 $requestValue = $requestConditions[$key] ?? null;
-                if ($requestValue && in_array($requestValue, $deniedValues)) {
+                $deniedValues = array_map(function ($val) {
+                    if ($val === "{sub}")
+                        return $this->user_id();
+                    return $val;
+                }, $deniedValues);
+                if ($requestValue !== null && in_array($requestValue, $deniedValues)) {
                     // Denied condition met, access forbidden
-                    return new GuardReponse(false, CoopResponse::UNAUTHORIZED);
+                    return false;
                 }
             }
         }
 
         // 2. Evaluate "allowed" conditions if "denied" conditions are not met
-        if (!empty($permissionConditions['allowed'])) {
-            foreach ($permissionConditions['allowed'] as $key => $allowedValues) {
+        if (!empty($permissionConditions->{'allowed'})) {
+            foreach ($permissionConditions->{'allowed'} as $key => $allowedValues) {
                 $requestValue = $requestConditions[$key] ?? null;
-                if ($requestValue && !in_array($requestValue, $allowedValues)) {
+                $allowedValues = array_map(function ($val) {
+                    if ($val === "{sub}")
+                        return $this->user_id();
+                    return $val;
+                }, $allowedValues);
+
+                if ($requestValue !== null && !in_array($requestValue, $allowedValues)) {
                     // Allowed condition not met
-                    return new GuardReponse(false, CoopResponse::UNAUTHORIZED);
+                    return false;
                 }
             }
         }
 
         // All conditions are satisfied
-        return new GuardReponse(true, CoopResponse::OK);
+        return true;
     }
 
     /**
@@ -175,37 +293,58 @@ class Auth
             // get token
             $token = $this->extractToken();
             // get claims
-            $claims = (array)$this->decodeToken($token);
+            $claims = $this->decodeToken($token);
 
             // Retrieve permissions from the decoded JWT
-            $permissions = $claims->permissions ?? [];
+            $permissions = $claims->permissions;
 
-            if (!isset($permissions[$resource]))
+            if (!isset($permissions->{$resource}))
                 return $model; // No permissions for this resource, return the model unmodified
 
 
-            $resourcePermissions = $permissions[$resource];
-            $conditions = $resourcePermissions['conditions'] ?? [];
+            $resourcePermissions = $permissions->{$resource};
 
-            // Build the query based on allowed and denied conditions
-            $allowedConditions = $conditions['allowed'] ?? [];
-            $deniedConditions = $conditions['denied'] ?? [];
+            foreach ($resourcePermissions as $key => $resourcePermission) {
+                $conditions = $resourcePermission->{'conditions'} ?? [];
 
-            // Apply "denied" conditions to exclude records
-            foreach ($deniedConditions as $key => $values) {
-                if (is_array($values)) {
-                    $model = $model->whereNotIn($key, $values);
-                } else {
-                    $model = $model->where("$key !=", $values);
+                // Build the query based on allowed and denied conditions
+                $allowedConditions = $conditions->{'allowed'} ?? [];
+                $deniedConditions = $conditions->{'denied'} ?? [];
+                unset($allowedConditions->{'sub'});
+                unset($deniedConditions->{'sub'});
+
+                // Apply "denied" conditions to exclude records
+                foreach ($deniedConditions as $key => $values) {
+                    if (is_array($values)) {
+                        $values = array_map(function ($val) {
+                            if ($val === "{sub}")
+                                return $this->user_id();
+                            return $val;
+                        }, $values);
+
+                        $model = $model->whereNotIn($key, $values);
+                    } else {
+                        if ($values === "{sub}")
+                        $values = $this->user_id();
+                        $model = $model->where("$key !=", $values);
+                    }
                 }
-            }
 
-            // Apply "allowed" conditions to restrict to specific records
-            foreach ($allowedConditions as $key => $values) {
-                if (is_array($values)) {
-                    $model = $model->whereIn($key, $values);
-                } else {
-                    $model = $model->where($key, $values);
+                // Apply "allowed" conditions to restrict to specific records
+                foreach ($allowedConditions as $key => $values) {
+                    if (is_array($values)) {
+                        $values = array_map(function ($val) {
+                            if ($val === "{sub}")
+                                return $this->user_id();
+                            return $val;
+                        }, $values);
+
+                        $model = $model->whereIn($key, $values);
+                    } else {
+                        if ($values === "{sub}")
+                            $values = $this->user_id();
+                        $model = $model->where($key, $values);
+                    }
                 }
             }
             return $model;

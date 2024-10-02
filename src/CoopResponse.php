@@ -10,6 +10,7 @@ class CoopResponse implements CoopResponseInterface
     protected $message;
     protected $code;
     protected $status;
+    protected $data;
     protected $error;
 
     protected $httpStatusMap = [
@@ -42,20 +43,22 @@ class CoopResponse implements CoopResponseInterface
 
     public $response;
 
-    public function __construct(bool $status, int $code, string $message = "", array $error = null)
+    public function __construct(bool $status, int $code, $data = null, string $message = null, array $error = null)
     {
         $this->message  = $message;
         $this->code     = $code;
         $this->status   = $status;
         $this->error    = $error;
+        $this->data     = $data;
     }
 
-    public function responsed(string $message = null, $error = null): ResponseInterface | null
+    public function responsed($data = null, string $message = null, $error = null): ResponseInterface | null
     {
         return response()->setJSON([
             'status' => $this->status,
             'code' => $this->code,
-            'message' => $message ? $message : $this->httpMessageMap[$this->code],
+            'data' => $data ? $data : $this->data,
+            'message' => $message ? $message : ($this->message ? $this->message : $this->httpMessageMap[$this->code]),
             'error' => $error ? $error : $this->error
         ])->setStatusCode(
             $this->httpStatusMap[$this->code],

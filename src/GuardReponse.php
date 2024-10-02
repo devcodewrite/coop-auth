@@ -4,13 +4,12 @@ namespace Codewrite\CoopAuth;
 
 class GuardReponse extends CoopResponse
 {
-    protected $status;
 
-    public function __construct($status, $code, $message = "")
+    public function __construct($status, $code, $message = null)
     {
         parent::__construct($status, $code, $message);
-        $this->status = $status;
     }
+    
     public function allowed(): bool
     {
         return $this->status;

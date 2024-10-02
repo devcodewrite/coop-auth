@@ -6,6 +6,15 @@ use CodeIgniter\Config\BaseConfig;
 
 class CoopAuth extends BaseConfig
 {
+    public $authModels = [
+        'UserModel'         => 'UserModel',
+        'UserRoleModel'     => 'UserRoleModel',
+        'PermissionModel'   => 'PermissionModel',
+        'ResourceModel'     => 'ResourceModel',
+        'UserGroupModel'    => 'UserGroupModel',
+        'GroupRoleModel'    => 'GroupRoleModel'
+    ];
+
     /**
      * --------------------------------------------------------------------------
      * JWT Secret
@@ -16,6 +25,8 @@ class CoopAuth extends BaseConfig
     public $jwtSecret = 'your-default-jwt-secret';
 
     public $tokenExpiry = 60; // Default to 60 secounds
+
+    public $refreshTokenExpiry = 60*60*24*30; // Default to 30 days
 
     public $algorithm = 'HS256';
 

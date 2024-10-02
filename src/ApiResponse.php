@@ -139,11 +139,11 @@ class ApiResponse
         } else {
             return Services::response()->setJSON([
                 'status'    => false,
-                'code'      => ErrorResponse::DATA_NOT_FOUND,
+                'code'      => CoopResponse::DATA_NOT_FOUND,
                 'message'   => "No record found in the '{$this->tableName}' matching the criteria.",
                 'data'      => null,
                 'error'     => [
-                    'code' => ErrorResponse::DATA_NOT_FOUND,
+                    'code' => CoopResponse::DATA_NOT_FOUND,
                     'message' => "The specified record does not exist in the '{$this->tableName}'.",
                     'details' => $filters
                 ]
@@ -168,12 +168,12 @@ class ApiResponse
         $columnsArray = is_string($requestedColumns) ? explode(',', $requestedColumns) : $requestedColumns;
 
         // Check if all requested columns are allowed
-        $invalidColumns = array_diff($columnsArray, $this->allowedColumns);
+        $invalidColumns = count($this->allowedColumns) === 0 ? [] : array_diff($columnsArray, $this->allowedColumns);
 
         if (!empty($invalidColumns)) {
             return [
                 'status' => false,
-                'code' => ErrorResponse::INVALID_COLUMNS,
+                'code' => CoopResponse::INVALID_COLUMNS,
                 'message' => "The following columns are not allowed: " . implode(', ', $invalidColumns),
                 'data' => null,
                 'error' => [
