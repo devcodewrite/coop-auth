@@ -31,7 +31,7 @@ class Auth
 
     public function __construct()
     {
-        $this->config   = config('coopauth');
+        $this->config   = config('CoopAuth');
         $this->request  = service('request');
         $this->response = service('response');
 
