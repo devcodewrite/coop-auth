@@ -18,4 +18,7 @@ interface CoopResponseInterface
     public const INSUFFICIENT_SCOPE     = 8;    // Insufficent scopes
     public const DATA_NOT_FOUND         = 9;    // Data not found
     public const INVALID_COLUMNS        = 10;   // Invalid query columns
+    public const INVALID_CREDENTIALS    = 11;   // Invalid credentials
+    public const UNVERIFIED_EMAIL       = 12;   // Email is not verified
+    public const UNVERIFIED_PHONE       = 13;   // Phone is not verified
 }

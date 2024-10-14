@@ -24,7 +24,10 @@ class CoopResponse implements CoopResponseInterface
         7   => Response::HTTP_UNAUTHORIZED,
         8   => Response::HTTP_UNAUTHORIZED,
         9   => Response::HTTP_NOT_FOUND,
-        10  => Response::HTTP_BAD_REQUEST
+        10  => Response::HTTP_BAD_REQUEST,
+        11  => Response::HTTP_FORBIDDEN,
+        12  => Response::HTTP_FORBIDDEN,
+        13  => Response::HTTP_FORBIDDEN
     ];
 
     public $httpMessageMap = [
@@ -38,7 +41,10 @@ class CoopResponse implements CoopResponseInterface
         7 => "Invalid permission",
         8 => "Insufficient scope",
         9 => "Data not found",
-        10 => "Invalid query param columns"
+        10 => "Invalid query param columns",
+        11 => "Invalid credentials",
+        12 => "Email is not verified",
+        13 => "Phone is not verified",
     ];
 
     public $response;
