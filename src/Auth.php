@@ -233,6 +233,48 @@ class Auth
         }
     }
 
+    /** 
+     * Check if the user has the specified permission
+     * $action http request method being executed.
+     * $resource The route path usually the controller that will
+     * execute the request of the user. This value should be in 
+     * the resource list in the config file
+     * $condition a string of the form feild:value that will be check
+     * on the model connected to the resource to see if it matches
+     */
+    public function canUser($userId, string $action, string $resource, array $conditions = null): GuardReponse
+    {
+        // Generate permissions
+        $permissions = $this->generatePermissions($userId)->permissions ?? [];
+
+        if (!isset($permissions->{$resource}))
+            return new GuardReponse(false, CoopResponse::UNAUTHORIZED);
+
+        $resourcePermissions = $permissions->{$resource};
+
+        if (gettype($resourcePermissions) !== 'array')
+            return new GuardReponse(false, CoopResponse::INVALID_PERMISSION);
+
+        foreach ($resourcePermissions as $resourcePermission) {
+            $allowedActions = $resourcePermission->{'actions'} ?? [];
+            if (
+                in_array($action, $allowedActions)
+                && !empty($resourcePermission->{'conditions'})
+                && $this->evaluateConditions($resourcePermission->{'conditions'}, $conditions)
+            ) {
+                return new GuardReponse(true, CoopResponse::OK);
+            }
+
+            if (
+                in_array($action, $allowedActions)
+                && empty($resourcePermission->{'conditions'})
+            ) {
+                return new GuardReponse(true, CoopResponse::OK);
+            }
+        }
+        return new GuardReponse(false, CoopResponse::UNAUTHORIZED);
+    }
+
     /**
      * Evaluate the conditions for a resource
      * For example, check if a given `id` is allowed based on the `conditions`
@@ -325,7 +367,7 @@ class Auth
                         $model = $model->whereNotIn($key, $values);
                     } else {
                         if ($values === "{sub}")
-                        $values = $this->user_id();
+                            $values = $this->user_id();
                         $model = $model->where("$key !=", $values);
                     }
                 }
