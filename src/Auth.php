@@ -28,6 +28,8 @@ class Auth
 
     public $groupRoleModel;
 
+    public $userId;
+
 
     public function __construct()
     {
@@ -178,6 +180,10 @@ class Auth
         return $this->userModel->find($user_id);
     }
 
+    public function objectToArray($obj)
+    {
+        return json_decode(json_encode($obj), true);
+    }
     /** 
      * Check if the user has the specified permission
      * $action http request method being executed.
@@ -193,32 +199,32 @@ class Auth
             // get token
             $token = $this->extractToken();
             // get claims
-            $claims = $this->decodeToken($token);
+            $claims = $this->objectToArray($this->decodeToken($token));
 
             // Retrieve permissions from the decoded JWT
             $permissions = $claims->permissions ?? [];
 
-            if (!isset($permissions->{$resource}))
+            if (!isset($permissions[$resource]))
                 return new GuardReponse(false, CoopResponse::UNAUTHORIZED);
 
-            $resourcePermissions = $permissions->{$resource};
+            $resourcePermissions = $permissions[$resource];
 
             if (gettype($resourcePermissions) !== 'array')
                 return new GuardReponse(false, CoopResponse::INVALID_PERMISSION);
 
             foreach ($resourcePermissions as $resourcePermission) {
-                $allowedActions = $resourcePermission->{'actions'} ?? [];
+                $allowedActions = $resourcePermission['actions'] ?? [];
                 if (
                     in_array($action, $allowedActions)
-                    && !empty($resourcePermission->{'conditions'})
-                    && $this->evaluateConditions($resourcePermission->{'conditions'}, $conditions)
+                    && !empty($resourcePermission['conditions'])
+                    && $this->evaluateConditions($resourcePermission['conditions'], $conditions)
                 ) {
                     return new GuardReponse(true, CoopResponse::OK);
                 }
 
                 if (
                     in_array($action, $allowedActions)
-                    && empty($resourcePermission->{'conditions'})
+                    && empty($resourcePermission['conditions'])
                 ) {
                     return new GuardReponse(true, CoopResponse::OK);
                 }
@@ -244,30 +250,32 @@ class Auth
      */
     public function canUser($userId, string $action, string $resource, array $conditions = null): GuardReponse
     {
-        // Generate permissions
-        $permissions = $this->generatePermissions($userId)->permissions ?? [];
+        $this->userId = $userId;
 
-        if (!isset($permissions->{$resource}))
+        // Generate permissions
+        $permissions = $this->generatePermissions($userId)['permissions'] ?? [];
+
+        if (!isset($permissions[$resource]))
             return new GuardReponse(false, CoopResponse::UNAUTHORIZED);
 
-        $resourcePermissions = $permissions->{$resource};
+        $resourcePermissions = $permissions[$resource];
 
         if (gettype($resourcePermissions) !== 'array')
             return new GuardReponse(false, CoopResponse::INVALID_PERMISSION);
 
         foreach ($resourcePermissions as $resourcePermission) {
-            $allowedActions = $resourcePermission->{'actions'} ?? [];
+            $allowedActions = $resourcePermission['actions'] ?? [];
             if (
                 in_array($action, $allowedActions)
-                && !empty($resourcePermission->{'conditions'})
-                && $this->evaluateConditions($resourcePermission->{'conditions'}, $conditions)
+                && !empty($resourcePermission['conditions'])
+                && $this->evaluateConditions($resourcePermission['conditions'], $conditions)
             ) {
                 return new GuardReponse(true, CoopResponse::OK);
             }
 
             if (
                 in_array($action, $allowedActions)
-                && empty($resourcePermission->{'conditions'})
+                && empty($resourcePermission['conditions'])
             ) {
                 return new GuardReponse(true, CoopResponse::OK);
             }
@@ -279,21 +287,21 @@ class Auth
      * Evaluate the conditions for a resource
      * For example, check if a given `id` is allowed based on the `conditions`
      */
-    private function evaluateConditions($permissionConditions, $requestConditions)
+    private function evaluateConditions($permissionConditions, $requestConditions, $userId = null)
     {
         if ($requestConditions === null || count($requestConditions ?? []) === 0)
             return true;
 
         // 1. Evaluate "denied" conditions first
-        if (!empty($permissionConditions->{'denied'})) {
-            foreach ($permissionConditions->{'denied'} as $key => $deniedValues) {
+        if (!empty($permissionConditions['denied'])) {
+            foreach ($permissionConditions['denied'] as $key => $deniedValues) {
                 $requestValue = $requestConditions[$key] ?? null;
                 $deniedValues = array_map(function ($val) {
                     if ($val === "{sub}")
-                        return $this->user_id();
+                        return $this->userId ?? $this->user_id();
                     return $val;
                 }, $deniedValues);
-                if ($requestValue !== null && in_array($requestValue, $deniedValues)) {
+                if ($requestValue !== null && in_array($requestValue, $deniedValues) && in_array('*', $deniedValues)) {
                     // Denied condition met, access forbidden
                     return false;
                 }
@@ -301,24 +309,24 @@ class Auth
         }
 
         // 2. Evaluate "allowed" conditions if "denied" conditions are not met
-        if (!empty($permissionConditions->{'allowed'})) {
-            foreach ($permissionConditions->{'allowed'} as $key => $allowedValues) {
+        if (!empty($permissionConditions['allowed'])) {
+            foreach ($permissionConditions['allowed'] as $key => $allowedValues) {
                 $requestValue = $requestConditions[$key] ?? null;
                 $allowedValues = array_map(function ($val) {
                     if ($val === "{sub}")
-                        return $this->user_id();
+                        return $this->userId ?? $this->user_id();
                     return $val;
                 }, $allowedValues);
 
-                if ($requestValue !== null && !in_array($requestValue, $allowedValues)) {
+                if ($requestValue !== null && (in_array($requestValue, $allowedValues) || in_array('*', $allowedValues))) {
                     // Allowed condition not met
-                    return false;
+                    return true;
                 }
             }
         }
 
         // All conditions are satisfied
-        return true;
+        return false;
     }
 
     /**
