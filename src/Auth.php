@@ -2,6 +2,7 @@
 
 namespace Codewrite\CoopAuth;
 
+use CodeIgniter\Database\RawSql;
 use CodeIgniter\HTTP\Exceptions\HTTPException;
 use CodeIgniter\Model;
 use Exception;
@@ -202,7 +203,9 @@ class Auth
             $claims = $this->objectToArray($this->decodeToken($token));
 
             // Retrieve permissions from the decoded JWT
-            $permissions = $claims->permissions ?? [];
+            $permissions = $claims['permissions'] ?? [];
+
+            // echo json_encode($permissions); die;
 
             if (!isset($permissions[$resource]))
                 return new GuardReponse(false, CoopResponse::UNAUTHORIZED);
@@ -287,11 +290,12 @@ class Auth
      * Evaluate the conditions for a resource
      * For example, check if a given `id` is allowed based on the `conditions`
      */
-    private function evaluateConditions($permissionConditions, $requestConditions, $userId = null)
+    private function evaluateConditions($permissionConditions, $requestConditions)
     {
         if ($requestConditions === null || count($requestConditions ?? []) === 0)
             return true;
 
+    
         // 1. Evaluate "denied" conditions first
         if (!empty($permissionConditions['denied'])) {
             foreach ($permissionConditions['denied'] as $key => $deniedValues) {
@@ -301,7 +305,8 @@ class Auth
                         return $this->userId ?? $this->user_id();
                     return $val;
                 }, $deniedValues);
-                if ($requestValue !== null && in_array($requestValue, $deniedValues) && in_array('*', $deniedValues)) {
+
+                if ($requestValue && in_array($requestValue, $deniedValues) && in_array('*', $deniedValues)) {
                     // Denied condition met, access forbidden
                     return false;
                 }
@@ -309,7 +314,7 @@ class Auth
         }
 
         // 2. Evaluate "allowed" conditions if "denied" conditions are not met
-        if (!empty($permissionConditions['allowed'])) {
+        if (!empty($permissionConditions['allowed'])) {  
             foreach ($permissionConditions['allowed'] as $key => $allowedValues) {
                 $requestValue = $requestConditions[$key] ?? null;
                 $allowedValues = array_map(function ($val) {
@@ -324,7 +329,7 @@ class Auth
                 }
             }
         }
-
+        
         // All conditions are satisfied
         return false;
     }
@@ -337,66 +342,60 @@ class Auth
      * @param string $resource
      * @return Model
      */
-    public function applyConditionsToModel(Model &$model, $resource)
+    public function applyConditionsToModel(Model &$model, $resource, $columns = [])
     {
         try {
             // get token
             $token = $this->extractToken();
-            // get claims
-            $claims = $this->decodeToken($token);
+            $claims = $this->objectToArray($this->decodeToken($token));
 
             // Retrieve permissions from the decoded JWT
-            $permissions = $claims->permissions;
+            $permissions = $claims['permissions'] ?? [];
+            $resourcePermissions = $permissions[$resource] ?? [];
 
-            if (!isset($permissions->{$resource}))
-                return $model; // No permissions for this resource, return the model unmodified
+            if (count($columns) === 0) return $model;
 
-
-            $resourcePermissions = $permissions->{$resource};
+            $hasView = false;
 
             foreach ($resourcePermissions as $key => $resourcePermission) {
-                $conditions = $resourcePermission->{'conditions'} ?? [];
+                if (in_array('view', $resourcePermission['actions'])) {
+                    $hasView = true;
+                    $conditions = $resourcePermission['conditions'] ?? [];
+                    // Build the query based on allowed and denied conditions
+                    $allowedConditions = $conditions['allowed'] ?? [];
+                    $deniedConditions = $conditions['denied'] ?? [];
 
-                // Build the query based on allowed and denied conditions
-                $allowedConditions = $conditions->{'allowed'} ?? [];
-                $deniedConditions = $conditions->{'denied'} ?? [];
-                unset($allowedConditions->{'sub'});
-                unset($deniedConditions->{'sub'});
+                    // Apply "denied" conditions to restrict to specific records
+                    foreach ($columns as $key) {
+                        if (!in_array("*", $deniedConditions[$key])) {
+                            $values = array_map(function ($val) {
+                                if ($val === "{sub}")
+                                    return $this->user_id();
+                                return $val;
+                            }, $deniedConditions[$key]);
 
-                // Apply "denied" conditions to exclude records
-                foreach ($deniedConditions as $key => $values) {
-                    if (is_array($values)) {
-                        $values = array_map(function ($val) {
-                            if ($val === "{sub}")
-                                return $this->user_id();
-                            return $val;
-                        }, $values);
-
-                        $model = $model->whereNotIn($key, $values);
-                    } else {
-                        if ($values === "{sub}")
-                            $values = $this->user_id();
-                        $model = $model->where("$key !=", $values);
+                            $model->whereNotIn($key, ['', ...$values]);
+                        }
                     }
-                }
 
-                // Apply "allowed" conditions to restrict to specific records
-                foreach ($allowedConditions as $key => $values) {
-                    if (is_array($values)) {
-                        $values = array_map(function ($val) {
-                            if ($val === "{sub}")
-                                return $this->user_id();
-                            return $val;
-                        }, $values);
+                    // Apply "allowed" conditions to restrict to specific records
+                    foreach ($columns as $key) {
+                        if (!in_array("*", $allowedConditions[$key])) {
 
-                        $model = $model->whereIn($key, $values);
-                    } else {
-                        if ($values === "{sub}")
-                            $values = $this->user_id();
-                        $model = $model->where($key, $values);
+                            $values = array_map(function ($val) {
+                                if ($val === "{sub}")
+                                    return $this->user_id();
+                                return $val;
+                            }, $allowedConditions[$key]);
+
+                            $model->whereIn($key, ['', ...$values]);
+                        }
                     }
                 }
             }
+
+            if (!$hasView) $model->where(new RawSql('0'));
+
             return $model;
         } catch (Exception $e) {
         }
