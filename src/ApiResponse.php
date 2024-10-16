@@ -60,6 +60,7 @@ class ApiResponse
 
         // Apply column selection
         if ($columns !== '*') {
+            $columns = array_merge($columns, $scopes);
             $this->model->select($columns);
         }
 
@@ -108,7 +109,7 @@ class ApiResponse
      *
      * @return array Structured JSON response for a single data item.
      */
-    public function getSingleResponse(): ResponseInterface
+    public function getSingleResponse($check = false, $scopes = []): ResponseInterface
     {
         // Parse and validate columns
         $columns = $this->validateColumns($this->params['columns'] ?? '*');
@@ -130,11 +131,18 @@ class ApiResponse
 
         // Apply column selection
         if ($columns !== '*') {
+            $columns = array_merge($columns, $scopes);
             $this->model->select($columns);
         }
 
         // Retrieve the single record
-        $result = $this->model->first();
+        $result = (array) $this->model->first();
+
+        if ($check) {
+            $guard = auth()->can('view', $this->tableName, $scopes, [$result]);
+            if ($guard->denied()) return $guard->responsed();
+            $result = $guard->results();
+        }
 
         if ($result) {
             return Services::response()->setJSON([
