@@ -190,9 +190,6 @@ class Auth
             // Retrieve permissions from the decoded JWT
             $permissions = $claims['permissions'] ?? [];
 
-            //  echo json_encode($permissions);
-            // die;
-
             $filteredRecords = [];
 
             if (!isset($permissions[$resource]))
@@ -263,39 +260,65 @@ class Auth
      * $condition a string of the form feild:value that will be check
      * on the model connected to the resource to see if it matches
      */
-    public function canUser($userId, string $action, string $resource, array $conditions = null): GuardReponse
+    public function canUser($userId, string $action, string $resource, array $scopes = [], array $records = []): GuardReponse
     {
-        $this->userId = $userId;
-
         // Generate permissions
         $permissions = $this->generatePermissions($userId)['permissions'] ?? [];
+        try {
+            $filteredRecords = [];
+            if (!isset($permissions[$resource]))
+                return new GuardReponse(false, CoopResponse::UNAUTHORIZED, null, $filteredRecords);
 
-        if (!isset($permissions[$resource]))
-            return new GuardReponse(false, CoopResponse::UNAUTHORIZED);
+            // Iterate over each record to check permission
+            foreach ($records as $record) {
+                $record = $this->objectToArray($record);
+                $hasAccess = false;
 
-        $resourcePermissions = $permissions[$resource];
+                // Loop through each permission rule for the given entity
+                foreach ($permissions[$resource] as $permission) {
+                    // Check if the action is allowed
+                    if (in_array($action, $permission['actions']) || $permission['actions'] === '*') {
+                        // Check if the record is within the allowed scope or if the scope is null (no restriction)
+                        if (
+                            $permission['scopes'] === null || empty(array_diff($scopes, $permission['scopes']))
+                        ) {
+                            // Check filters for this record
+                            $filtersMatch = true;
+                            $filters = $permission['filters'] ?? [];
 
-        if (gettype($resourcePermissions) !== 'array')
-            return new GuardReponse(false, CoopResponse::INVALID_PERMISSION);
+                            foreach ($filters as $filterKey => $allowedValues) {
 
-        foreach ($resourcePermissions as $resourcePermission) {
-            $allowedActions = $resourcePermission['actions'] ?? [];
-            if (
-                in_array($action, $allowedActions)
-                && !empty($resourcePermission['conditions'])
-                && $this->evaluateConditions($resourcePermission['conditions'], $conditions)
-            ) {
-                return new GuardReponse(true, CoopResponse::OK);
+                                // If filter is "*", allow all values, otherwise match against the allowed values
+                                if ($allowedValues !== '*' && !empty($allowedValues)) {
+                                    // Check if the record's field value matches the allowed filter values
+                                    if (!in_array($record[$filterKey], $allowedValues)) {
+                                        $filtersMatch = false;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            // If all filters match, set hasAccess to true
+                            if ($filtersMatch) {
+                                $hasAccess = true;
+                                break; // No need to check further permissions for this record
+                            }
+                        }
+                    }
+                }
+
+                // If no valid permission is found for any of the records, return false
+                if (!$hasAccess) {
+                    return new GuardReponse(false, GuardReponse::UNAUTHORIZED);
+                } else {
+                    $filteredRecords[] = $record;
+                }
             }
-
-            if (
-                in_array($action, $allowedActions)
-                && empty($resourcePermission['conditions'])
-            ) {
-                return new GuardReponse(true, CoopResponse::OK);
-            }
+            // If all records passed the permission check, return true
+            return new GuardReponse(true, GuardReponse::OK, null, $filteredRecords);
+        } catch (Exception $e) {
+            return new GuardReponse(false, CoopResponse::INVALID_PERMISSION, $e->getMessage());
         }
-        return new GuardReponse(false, CoopResponse::UNAUTHORIZED);
     }
 
     /**
