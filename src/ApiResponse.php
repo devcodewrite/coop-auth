@@ -34,7 +34,7 @@ class ApiResponse
      *
      * @return array Structured JSON response for a collection.
      */
-    public function getCollectionResponse(): ResponseInterface
+    public function getCollectionResponse($check = false, array $scopes = []): ResponseInterface
     {
         // Parse and validate columns
         $columns = $this->validateColumns($this->params['columns'] ?? '*');
@@ -50,6 +50,7 @@ class ApiResponse
 
         // Apply filters
         if (!empty($filters)) {
+
             foreach ($filters as $column => $value) {
                 if (in_array($column, $this->allowedColumns)) {
                     $this->model->where($column, $value);
@@ -77,6 +78,12 @@ class ApiResponse
         // Apply pagination
         $offset = ($page - 1) * $pageSize;
         $results = $this->model->findAll($pageSize, $offset);
+
+        if ($check) {
+            $guard = auth()->can('view', $this->tableName, $scopes, $results);
+            if ($guard->denied()) return $guard->responsed();
+            $results = $guard->results();
+        }
 
         // Calculate total pages
         $totalPages = (int) ceil($totalItems / $pageSize);

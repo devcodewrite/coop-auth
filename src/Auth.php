@@ -73,35 +73,20 @@ class Auth
             ->whereIn('role_id', $roleIds)
             ->findAll();
 
-        // Step 3: Get Resources Data
-        $resourceIds = array_unique(array_column($permissionsData, 'resource_id'));
-        $resources = $this->resourceModel->whereIn('id', $resourceIds)->findAll();
-        $resourceMap = [];
-        foreach ($resources as $resource) {
-            $resourceMap[$resource->id] = $resource->id;
-        }
-
-        // Step 4: Build Permissions Structure
         $permissions = [];
-
         foreach ($permissionsData as $permission) {
-            $resourceName = $resourceMap[$permission->resource_id] ?? null;
-            if (!$resourceName) {
-                continue; // Skip if the resource is not found
-            }
 
             // Prepare the permission structure for the resource
             $permissionEntry = [
                 'actions' => json_decode($permission->actions, true),
-                'conditions' => json_decode($permission->conditions, true)
+                'scopes' => json_decode($permission->scopes, true),
+                'filters' => json_decode($permission->filters, true)
             ];
-
-            if (!isset($permissions[$resourceName])) {
-                $permissions[$resourceName] = [];
-            }
+            if (!isset($permissions[$permission->resource_id]))
+                $permissions[$permission->resource_id] = [];
 
             // Add the permission entry to the resource
-            $permissions[$resourceName][] = $permissionEntry;
+            $permissions[$permission->resource_id][] = $permissionEntry;
         }
 
         // Step 5: Format the Permission JSON
@@ -194,7 +179,7 @@ class Auth
      * $condition a string of the form feild:value that will be check
      * on the model connected to the resource to see if it matches
      */
-    public function can(string $action, string $resource, array $conditions = null): GuardReponse
+    public function can(string $action, string $resource, array $scopes = [], array $records = []): GuardReponse
     {
         try {
             // get token
@@ -205,40 +190,67 @@ class Auth
             // Retrieve permissions from the decoded JWT
             $permissions = $claims['permissions'] ?? [];
 
-            // echo json_encode($permissions); die;
+            //  echo json_encode($permissions);
+            // die;
+
+            $filteredRecords = [];
 
             if (!isset($permissions[$resource]))
-                return new GuardReponse(false, CoopResponse::UNAUTHORIZED);
+                return new GuardReponse(false, CoopResponse::UNAUTHORIZED, null, $filteredRecords);
 
-            $resourcePermissions = $permissions[$resource];
+            // Iterate over each record to check permission
+            foreach ($records as $record) {
+                $record = $this->objectToArray($record);
+                $hasAccess = false;
 
-            if (gettype($resourcePermissions) !== 'array')
-                return new GuardReponse(false, CoopResponse::INVALID_PERMISSION);
+                // Loop through each permission rule for the given entity
+                foreach ($permissions[$resource] as $permission) {
+                    // Check if the action is allowed
+                    if (in_array($action, $permission['actions']) || $permission['actions'] === '*') {
+                        // Check if the record is within the allowed scope or if the scope is null (no restriction)
+                        if (
+                            $permission['scopes'] === null || empty(array_diff($scopes, $permission['scopes']))
+                        ) {
+                            // Check filters for this record
+                            $filtersMatch = true;
+                            $filters = $permission['filters'] ?? [];
 
-            foreach ($resourcePermissions as $resourcePermission) {
-                $allowedActions = $resourcePermission['actions'] ?? [];
-                if (
-                    in_array($action, $allowedActions)
-                    && !empty($resourcePermission['conditions'])
-                    && $this->evaluateConditions($resourcePermission['conditions'], $conditions)
-                ) {
-                    return new GuardReponse(true, CoopResponse::OK);
+                            foreach ($filters as $filterKey => $allowedValues) {
+
+                                // If filter is "*", allow all values, otherwise match against the allowed values
+                                if ($allowedValues !== '*' && !empty($allowedValues)) {
+                                    // Check if the record's field value matches the allowed filter values
+                                    if (!in_array($record[$filterKey], $allowedValues)) {
+                                        $filtersMatch = false;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            // If all filters match, set hasAccess to true
+                            if ($filtersMatch) {
+                                $hasAccess = true;
+                                break; // No need to check further permissions for this record
+                            }
+                        }
+                    }
                 }
 
-                if (
-                    in_array($action, $allowedActions)
-                    && empty($resourcePermission['conditions'])
-                ) {
-                    return new GuardReponse(true, CoopResponse::OK);
+                // If no valid permission is found for any of the records, return false
+                if (!$hasAccess) {
+                    return new GuardReponse(false, GuardReponse::UNAUTHORIZED);
+                } else {
+                    $filteredRecords[] = $record;
                 }
             }
-            return new GuardReponse(false, CoopResponse::UNAUTHORIZED);
+            // If all records passed the permission check, return true
+            return new GuardReponse(true, GuardReponse::OK, null, $filteredRecords);
         } catch (ExpiredException $e) {
             return new GuardReponse(false, CoopResponse::TOKEN_EXPIRED);
         } catch (HTTPException $e) {
             return new GuardReponse(false, CoopResponse::TOKEN_NOT_PROVIDED);
         } catch (Exception $e) {
-            return new GuardReponse(false, CoopResponse::INVALID_TOKEN);
+            return new GuardReponse(false, CoopResponse::INVALID_PERMISSION, $e->getMessage());
         }
     }
 
@@ -295,7 +307,7 @@ class Auth
         if ($requestConditions === null || count($requestConditions ?? []) === 0)
             return true;
 
-    
+
         // 1. Evaluate "denied" conditions first
         if (!empty($permissionConditions['denied'])) {
             foreach ($permissionConditions['denied'] as $key => $deniedValues) {
@@ -314,7 +326,7 @@ class Auth
         }
 
         // 2. Evaluate "allowed" conditions if "denied" conditions are not met
-        if (!empty($permissionConditions['allowed'])) {  
+        if (!empty($permissionConditions['allowed'])) {
             foreach ($permissionConditions['allowed'] as $key => $allowedValues) {
                 $requestValue = $requestConditions[$key] ?? null;
                 $allowedValues = array_map(function ($val) {
@@ -329,7 +341,7 @@ class Auth
                 }
             }
         }
-        
+
         // All conditions are satisfied
         return false;
     }
@@ -358,39 +370,44 @@ class Auth
             $hasView = false;
 
             foreach ($resourcePermissions as $key => $resourcePermission) {
+
                 if (in_array('view', $resourcePermission['actions'])) {
+
                     $hasView = true;
                     $conditions = $resourcePermission['conditions'] ?? [];
                     // Build the query based on allowed and denied conditions
                     $allowedConditions = $conditions['allowed'] ?? [];
                     $deniedConditions = $conditions['denied'] ?? [];
 
+                    $model->groupStart();
                     // Apply "denied" conditions to restrict to specific records
                     foreach ($columns as $key) {
-                        if (!in_array("*", $deniedConditions[$key])) {
+                        if (!in_array("*", ($deniedConditions[$key] ?? []))) {
                             $values = array_map(function ($val) {
                                 if ($val === "{sub}")
                                     return $this->user_id();
                                 return $val;
-                            }, $deniedConditions[$key]);
+                            }, $deniedConditions[$key] ?? []);
 
-                            $model->whereNotIn($key, ['', ...$values]);
+                            $model->whereNotIn($key, ['#', ...$values]);
                         }
                     }
-
+                    $model->groupEnd();
+                    $model->groupStart();
                     // Apply "allowed" conditions to restrict to specific records
                     foreach ($columns as $key) {
-                        if (!in_array("*", $allowedConditions[$key])) {
+                        if (!in_array("*", ($allowedConditions[$key] ?? []))) {
 
                             $values = array_map(function ($val) {
                                 if ($val === "{sub}")
                                     return $this->user_id();
                                 return $val;
-                            }, $allowedConditions[$key]);
+                            }, $allowedConditions[$key] ?? []);
 
-                            $model->whereIn($key, ['', ...$values]);
+                            $model->whereIn($key, ['#', ...$values]);
                         }
                     }
+                    $model->groupEnd();
                 }
             }
 
@@ -398,6 +415,7 @@ class Auth
 
             return $model;
         } catch (Exception $e) {
+            die($e->getMessage());
         }
         return false;
     }
