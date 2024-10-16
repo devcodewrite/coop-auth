@@ -13,6 +13,7 @@ class ApiResponse
     protected $params;
     protected $tableName;
     protected $allowedColumns = [];
+    protected $scopes;
 
     /**
      * Constructor to initialize the model and request parameters.
@@ -36,6 +37,8 @@ class ApiResponse
      */
     public function getCollectionResponse($check = false, array $scopes = []): ResponseInterface
     {
+        $this->scopes = $scopes;
+
         // Parse and validate columns
         $columns = $this->validateColumns($this->params['columns'] ?? '*');
         if (isset($columns['error'])) {
@@ -60,7 +63,6 @@ class ApiResponse
 
         // Apply column selection
         if ($columns !== '*') {
-            $columns = array_merge($columns, $scopes);
             $this->model->select($columns);
         }
 
@@ -111,6 +113,8 @@ class ApiResponse
      */
     public function getSingleResponse($check = false, $scopes = []): ResponseInterface
     {
+        $this->scopes = $scopes;
+
         // Parse and validate columns
         $columns = $this->validateColumns($this->params['columns'] ?? '*');
         if (isset($columns['error'])) {
@@ -131,7 +135,6 @@ class ApiResponse
 
         // Apply column selection
         if ($columns !== '*') {
-            $columns = array_merge($columns, $scopes);
             $this->model->select($columns);
         }
 
@@ -200,7 +203,7 @@ class ApiResponse
         }
 
         // Return validated columns as a comma-separated string
-        return implode(',', $columnsArray);
+        return implode(',', array_merge($this->scopes, $columnsArray));
     }
 
     /**
