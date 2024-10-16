@@ -136,7 +136,7 @@ class ApiResponse
         }
 
         // Retrieve the single record
-        $result = (array) $this->model->first();
+        $result = $this->model->first();
 
         if ($check) {
             $guard = auth()->can('view', $this->tableName, $scopes, [$result]);
