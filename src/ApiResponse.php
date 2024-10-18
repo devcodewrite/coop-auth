@@ -141,6 +141,16 @@ class ApiResponse
         // Retrieve the single record
         $result = $this->model->first();
 
+        if(!$result) {
+            return Services::response()->setJSON([
+                'status'    => false,
+                'code'      => CoopResponse::DATA_NOT_FOUND,
+                'message'   => "No record found in the '{$this->tableName}' matching the criteria.",
+                'data'      => null,
+                'error'     => null
+            ])->setStatusCode(Response::HTTP_NOT_FOUND);
+        }
+
         if ($check) {
             $guard = auth()->can('view', $this->tableName, $scopes, [$result]);
             if ($guard->denied()) return $guard->responsed();
@@ -154,18 +164,6 @@ class ApiResponse
                 'message' => "'{$this->tableName}' retrieved successfully.",
                 'data' => $result
             ])->setStatusCode(Response::HTTP_OK);
-        } else {
-            return Services::response()->setJSON([
-                'status'    => false,
-                'code'      => CoopResponse::DATA_NOT_FOUND,
-                'message'   => "No record found in the '{$this->tableName}' matching the criteria.",
-                'data'      => null,
-                'error'     => [
-                    'code' => CoopResponse::DATA_NOT_FOUND,
-                    'message' => "The specified record does not exist in the '{$this->tableName}'.",
-                    'details' => $filters
-                ]
-            ])->setStatusCode(Response::HTTP_NOT_FOUND);
         }
     }
 
