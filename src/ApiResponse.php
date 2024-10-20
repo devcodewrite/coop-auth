@@ -190,7 +190,7 @@ class ApiResponse
             return [
                 'status' => false,
                 'code' => CoopResponse::INVALID_COLUMNS,
-                'message' => "The following columns are not allowed: " . implode(', ', $invalidColumns),
+                'message' => "The following columns are not allowed: " . implode(',', $invalidColumns),
                 'data' => null,
                 'error' => [
                     'code' => 'INVALID_COLUMNS',
